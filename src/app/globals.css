@@ -1,0 +1,251 @@
+@import "tailwindcss";
+/* Leaflet's stylesheet used to be imported here, which put ~15KB of map CSS
+   on every page in the app — including the driver's phone screens, which
+   never show a map. It now lives in factories-overview-map.tsx so it ships
+   inside that component's next/dynamic chunk, alongside the Leaflet JS it
+   styles. Its selectors are all .leaflet-* namespaced, so nothing else
+   depended on it being global. */
+@plugin "tailwindcss-animate";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --radius: 0.65rem;
+
+  /* DHL-style warm/yellow brand palette. Neutrals (background, border,
+     muted, secondary) are shifted from the old blue-ish hue (~255-260) to a
+     warm hue (~85-93) so they read as "warm gray" alongside the yellow
+     primary instead of clashing with it. --primary is #FFCC00 (DHL yellow)
+     — verified via a WCAG contrast check against --primary-foreground
+     (11:1) before shipping, since bright yellow fails as a *text* color on
+     light backgrounds (~1.5:1) even though it's excellent as a fill. Any
+     spot that needs yellow-family *text* or a small icon uses Tailwind's
+     amber-700 (~5:1 on white) instead of --primary directly — see
+     order-status-tabs.tsx / distribution-panel.tsx / track/page.tsx. */
+  --background: oklch(0.985 0.009 93.6);
+  --foreground: oklch(0.2 0.015 90);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.2 0.015 90);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.2 0.015 90);
+
+  --primary: oklch(0.865 0.177 90.4);
+  --primary-foreground: oklch(0.235 0.049 98.6);
+
+  --secondary: oklch(0.95 0.015 90);
+  --secondary-foreground: oklch(0.25 0.02 90);
+
+  --muted: oklch(0.96 0.008 90);
+  --muted-foreground: oklch(0.5 0.02 85);
+
+  --accent: oklch(0.94 0.035 90);
+  --accent-foreground: oklch(0.25 0.02 90);
+
+  --destructive: oklch(0.55 0.22 25);
+  --destructive-foreground: oklch(0.98 0 0);
+
+  --success: oklch(0.6 0.15 145);
+  --success-foreground: oklch(0.98 0 0);
+
+  /* Deliberately a different hue from --primary (55 vs 90) so a "warning"
+     amber and the brand's golden yellow never get mistaken for each other. */
+  --warning: oklch(0.72 0.17 55);
+  --warning-foreground: oklch(0.2 0.02 55);
+
+  --border: oklch(0.9 0.008 90);
+  --input: oklch(0.9 0.008 90);
+  --ring: oklch(0.6 0.17 55);
+}
+
+.dark {
+  --background: oklch(0.16 0.012 80);
+  --foreground: oklch(0.96 0.005 80);
+  --card: oklch(0.2 0.012 80);
+  --card-foreground: oklch(0.96 0.005 80);
+  --popover: oklch(0.2 0.012 80);
+  --popover-foreground: oklch(0.96 0.005 80);
+  --primary: oklch(0.865 0.177 90.4);
+  --primary-foreground: oklch(0.235 0.049 98.6);
+  --secondary: oklch(0.27 0.012 80);
+  --secondary-foreground: oklch(0.96 0.005 80);
+  --muted: oklch(0.25 0.012 80);
+  --muted-foreground: oklch(0.68 0.02 80);
+  --accent: oklch(0.32 0.04 85);
+  --accent-foreground: oklch(0.96 0.005 80);
+  --destructive: oklch(0.6 0.2 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --success: oklch(0.65 0.15 145);
+  --success-foreground: oklch(0.1 0 0);
+  --warning: oklch(0.72 0.17 55);
+  --warning-foreground: oklch(0.15 0.02 55);
+  --border: oklch(0.32 0.012 80);
+  --input: oklch(0.32 0.012 80);
+  --ring: oklch(0.8 0.16 84);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: "Tahoma", "Segoe UI", "Arial", system-ui, sans-serif;
+
+  /* Motion tokens: a small, reusable vocabulary rather than one-off
+     transitions scattered per component — used by the tracking page's step
+     tracker, the order timeline, and any card/list entrance. */
+  --animate-fade-in-up: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-pop-in: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  --animate-draw-line: draw-line 0.6s ease-out both;
+  --animate-shimmer: shimmer 1.6s ease-in-out infinite;
+  /* HeroBackground's drifting cooking pots (see hero-background.tsx) — one
+     shared keyframe, one per-instance duration/delay set inline so each
+     pot travels at its own speed/offset instead of moving in lockstep. */
+  --animate-pot-drift: pot-drift 24s linear infinite;
+  --animate-steam-rise: steam-rise 5s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  70% {
+    transform: scale(1.12);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes draw-line {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@keyframes shimmer {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* Right-to-left drift across the hero (matches the site's own RTL reading
+   direction) — travels a fixed distance in vw so it fully clears the
+   screen at any viewport width, rather than a percentage of the pot's own
+   (tiny) size. Each pot starts positioned off the right edge (see
+   hero-background.tsx) and a negative animation-delay staggers where in
+   the loop it starts, so the whole set doesn't spawn bunched at the edge
+   together on first paint. */
+@keyframes pot-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-160vw);
+  }
+}
+
+@keyframes steam-rise {
+  0% {
+    transform: translateY(0) scale(0.85);
+    opacity: 0;
+  }
+  30% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-34px) scale(1.15);
+    opacity: 0;
+  }
+}
+
+/* Someone who's set the OS-level "reduce motion" preference doesn't want a
+   background full of continuously drifting/pulsing shapes, even gentle
+   ones — freeze every HeroBackground layer on its opening frame instead of
+   looping, same as a scroll-triggered animation is expected to respect
+   this preference. */
+@media (prefers-reduced-motion: reduce) {
+  .hero-drift,
+  .hero-drift * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    direction: rtl;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    font-feature-settings: "tnum" 1;
+  }
+}
+
+/* Staggered entrance for a grid/list of cards — each child fades/slides in
+   with a small incremental delay instead of all popping in at once. Applied
+   to the StatCard grids on every dashboard and the order-card lists on the
+   driver/factory screens; nth-child covers the first 14 (past that, entries
+   just share the last delay, which is imperceptible). */
+.stagger-children > * {
+  animation: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 45ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 90ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 135ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 180ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 225ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 270ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 315ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 360ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 405ms; }
+.stagger-children > *:nth-child(11) { animation-delay: 450ms; }
+.stagger-children > *:nth-child(n + 12) { animation-delay: 495ms; }

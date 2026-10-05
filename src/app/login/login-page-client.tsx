@@ -1,0 +1,227 @@
+"use client";
+
+import { Suspense, useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+import { phoneLookupSchema, setInitialPasswordSchema, phoneLoginSchema } from "@/lib/domain/validators";
+import { checkPhoneAction, setInitialPasswordAction, phoneLoginAction } from "@/lib/actions/staff-auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { HeroBackground } from "@/components/shared/hero-background";
+import { BrandLogoFull } from "@/components/shared/brand-logo";
+import { Loader2, ArrowRight } from "lucide-react";
+
+export function LoginPageClient() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageInner />
+    </Suspense>
+  );
+}
+
+function LoginPageInner() {
+  const searchParams = useSearchParams();
+  const inactiveError = searchParams.get("error") === "account_inactive";
+
+  return (
+    <main className="relative flex min-h-screen flex-col items-center justify-center overflow-hidden p-6">
+      <HeroBackground />
+
+      <BrandLogoFull className="relative z-10 mb-6 h-20 w-auto drop-shadow-sm" />
+
+      <Card className="relative z-10 w-full max-w-sm border-0 bg-white shadow-2xl">
+        <CardHeader>
+          <CardTitle>تسجيل دخول فريق العمل</CardTitle>
+          <CardDescription>للمدير والموديريتور والمندوبين والمصنع</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {inactiveError && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertDescription>هذا الحساب غير مفعّل. تواصل مع المدير.</AlertDescription>
+            </Alert>
+          )}
+          <PhoneLoginFlow />
+        </CardContent>
+      </Card>
+    </main>
+  );
+}
+
+function PhoneLoginFlow() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [stage, setStage] = useState<"phone" | "create" | "enter">("phone");
+  const [phone, setPhone] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const phoneForm = useForm<{ phone: string }>({
+    resolver: zodResolver(phoneLookupSchema),
+    defaultValues: { phone: "" },
+  });
+
+  const createForm = useForm({
+    resolver: zodResolver(setInitialPasswordSchema),
+    defaultValues: { phone: "", password: "", confirmPassword: "" },
+  });
+
+  const enterForm = useForm({
+    resolver: zodResolver(phoneLoginSchema),
+    defaultValues: { phone: "", password: "" },
+  });
+
+  async function onCheckPhone(values: { phone: string }) {
+    setSubmitting(true);
+    const res = await checkPhoneAction(values);
+    setSubmitting(false);
+    if (!res.ok) {
+      phoneForm.setError("phone", { message: res.error });
+      return;
+    }
+    setPhone(values.phone);
+    if (res.data.needsPasswordSetup) {
+      createForm.setValue("phone", values.phone);
+      setStage("create");
+    } else {
+      enterForm.setValue("phone", values.phone);
+      setStage("enter");
+    }
+  }
+
+  async function onCreatePassword(values: { phone: string; password: string; confirmPassword: string }) {
+    setSubmitting(true);
+    const res = await setInitialPasswordAction(values);
+    setSubmitting(false);
+    if (!res.ok) {
+      toast.error("تعذر إنشاء كلمة المرور", { description: res.error });
+      return;
+    }
+    toast.success("تم إنشاء كلمة المرور وتسجيل الدخول");
+    router.replace(searchParams.get("next") || `/${res.data.role}`);
+    router.refresh();
+  }
+
+  async function onEnterPassword(values: { phone: string; password: string }) {
+    setSubmitting(true);
+    const res = await phoneLoginAction(values);
+    setSubmitting(false);
+    if (!res.ok) {
+      toast.error("فشل تسجيل الدخول", { description: res.error });
+      return;
+    }
+    toast.success("تم تسجيل الدخول بنجاح");
+    router.replace(searchParams.get("next") || `/${res.data.role}`);
+    router.refresh();
+  }
+
+  function backToPhone() {
+    setStage("phone");
+    createForm.reset({ phone: "", password: "", confirmPassword: "" });
+    enterForm.reset({ phone: "", password: "" });
+  }
+
+  if (stage === "phone") {
+    return (
+      <Form {...phoneForm}>
+        <form onSubmit={phoneForm.handleSubmit(onCheckPhone)} className="space-y-4">
+          <FormField
+            control={phoneForm.control}
+            name="phone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>رقم الهاتف</FormLabel>
+                <FormControl>
+                  <Input dir="ltr" placeholder="01xxxxxxxxx" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 className="animate-spin" />}
+            متابعة
+          </Button>
+        </form>
+      </Form>
+    );
+  }
+
+  if (stage === "create") {
+    return (
+      <Form {...createForm}>
+        <form onSubmit={createForm.handleSubmit(onCreatePassword)} className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            أول تسجيل دخول لك — أنشئ كلمة مرور لحسابك ({phone})
+          </p>
+          <FormField
+            control={createForm.control}
+            name="password"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>كلمة المرور الجديدة</FormLabel>
+                <FormControl>
+                  <Input type="password" dir="ltr" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={createForm.control}
+            name="confirmPassword"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>تأكيد كلمة المرور</FormLabel>
+                <FormControl>
+                  <Input type="password" dir="ltr" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <Button type="submit" className="w-full" disabled={submitting}>
+            {submitting && <Loader2 className="animate-spin" />}
+            إنشاء كلمة المرور وتسجيل الدخول
+          </Button>
+          <Button type="button" variant="ghost" className="w-full" onClick={backToPhone} disabled={submitting}>
+            <ArrowRight className="size-4" />
+            رقم هاتف آخر
+          </Button>
+        </form>
+      </Form>
+    );
+  }
+
+  return (
+    <Form {...enterForm}>
+      <form onSubmit={enterForm.handleSubmit(onEnterPassword)} className="space-y-4">
+        <p className="text-sm text-muted-foreground">{phone}</p>
+        <FormField
+          control={enterForm.control}
+          name="password"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>كلمة المرور</FormLabel>
+              <FormControl>
+                <Input type="password" dir="ltr" autoFocus {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <Button type="submit" className="w-full" disabled={submitting}>
+          {submitting && <Loader2 className="animate-spin" />}
+          تسجيل الدخول
+        </Button>
+        <Button type="button" variant="ghost" className="w-full" onClick={backToPhone} disabled={submitting}>
+          <ArrowRight className="size-4" />
+          رقم هاتف آخر
+        </Button>
+      </form>
+    </Form>
+  );
+}

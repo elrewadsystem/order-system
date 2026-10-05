@@ -1,0 +1,187 @@
+"use client";
+
+import { useCallback, useEffect, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { Bell, BellOff, Loader2, Share, SquarePlus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { savePushSubscriptionAction, deletePushSubscriptionAction } from "@/lib/actions/push";
+import {
+  getPushCapability,
+  getExistingSubscription,
+  subscribeToPush,
+  unsubscribeFromPush,
+  type PushCapability,
+} from "@/lib/push/client";
+
+export function PushSetupCard({
+  vapidPublicKey,
+  profileId,
+}: {
+  vapidPublicKey: string;
+  profileId: string;
+}) {
+  const [capability, setCapability] = useState<PushCapability | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [working, setWorking] = useState(false);
+
+  const refresh = useCallback(() => {
+    void getPushCapability().then(setCapability);
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const subscription = await getExistingSubscription();
+      if (cancelled || !subscription) return;
+
+      const key = `push-bound:${profileId}:${subscription.endpoint}`;
+      try {
+        if (sessionStorage.getItem(key) === "1") return;
+      } catch {
+      }
+
+      const result = await savePushSubscriptionAction(subscription);
+      if (cancelled) return;
+      if (result.ok) {
+        try {
+          sessionStorage.setItem(key, "1");
+        } catch {
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profileId]);
+
+  async function enable() {
+    setWorking(true);
+    try {
+      const subscription = await subscribeToPush(vapidPublicKey);
+      const result = await savePushSubscriptionAction(subscription);
+      if (!result.ok) {
+        toast.error(result.error);
+        await unsubscribeFromPush();
+        return;
+      }
+      toast.success("تم تفعيل الإشعارات على هذا الجهاز");
+      refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "تعذر تفعيل الإشعارات");
+      refresh();
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function disable() {
+    setWorking(true);
+    void (async () => {
+      try {
+        const endpoint = await unsubscribeFromPush();
+        if (endpoint) {
+          startTransition(() => {
+            void deletePushSubscriptionAction(endpoint);
+          });
+        }
+        toast.success("تم إيقاف الإشعارات على هذا الجهاز");
+        refresh();
+      } finally {
+        setWorking(false);
+      }
+    })();
+  }
+
+  if (capability === null) return null;
+
+  if (capability === "unsupported") return null;
+
+  const busy = working || pending;
+
+  if (capability === "subscribed") {
+    return (
+      <Card className="border-success/40 bg-success/5">
+        <CardContent className="flex items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2 text-sm">
+            <Bell className="size-4 shrink-0 text-success" />
+            <span>الإشعارات مفعّلة على هذا الجهاز</span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={disable} disabled={busy}>
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <BellOff className="size-4" />}
+            إيقاف
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (capability === "denied") {
+    return (
+      <Card className="border-warning/40 bg-warning/5">
+        <CardContent className="space-y-1 py-3 text-sm">
+          <p className="flex items-center gap-2 font-medium">
+            <BellOff className="size-4 shrink-0" />
+            الإشعارات محظورة في هذا المتصفح
+          </p>
+          <p className="text-muted-foreground">
+            لإعادة تفعيلها، افتح إعدادات الموقع في المتصفح واسمح بالإشعارات، ثم أعد تحميل الصفحة.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (capability === "ios-needs-install") {
+    return (
+      <Card className="border-primary/40 bg-primary/5">
+        <CardContent className="space-y-2 py-3 text-sm">
+          <p className="flex items-center gap-2 font-medium">
+            <Bell className="size-4 shrink-0" />
+            لتفعيل الإشعارات على الآيفون، أضف التطبيق للشاشة الرئيسية أولًا
+          </p>
+          <ol className="space-y-1 text-muted-foreground">
+            <li className="flex items-center gap-2">
+              <span className="font-medium text-foreground">١.</span>
+              اضغط زر المشاركة
+              <Share className="size-4" />
+              في شريط سفاري
+            </li>
+            <li className="flex items-center gap-2">
+              <span className="font-medium text-foreground">٢.</span>
+              اختر «إضافة إلى الشاشة الرئيسية»
+              <SquarePlus className="size-4" />
+            </li>
+            <li>
+              <span className="font-medium text-foreground">٣.</span> افتح التطبيق من الأيقونة
+              الجديدة، وستجد زر تفعيل الإشعارات هنا
+            </li>
+          </ol>
+          <p className="text-xs text-muted-foreground">
+            يحتاج الآيفون نظام iOS 16.4 أو أحدث. على الأندرويد تعمل الإشعارات من المتصفح مباشرة بدون
+            تثبيت.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-primary/40 bg-primary/5">
+      <CardContent className="flex flex-wrap items-center justify-between gap-3 py-3">
+        <div className="flex items-center gap-2 text-sm">
+          <Bell className="size-4 shrink-0" />
+          <span>فعّل الإشعارات ليصلك تنبيه على هاتفك فور وصول أوردر أو رسالة</span>
+        </div>
+        <Button size="sm" onClick={enable} disabled={busy}>
+          {busy ? <Loader2 className="size-4 animate-spin" /> : <Bell className="size-4" />}
+          تفعيل الإشعارات
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}

@@ -1,0 +1,39 @@
+import Link from "next/link";
+import { ownerExists } from "@/lib/actions/setup";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { SetupForm } from "@/components/auth/setup-form";
+import { HeroBackground } from "@/components/shared/hero-background";
+
+export const dynamic = "force-dynamic";
+
+export default async function SetupPage() {
+  const alreadySetUp = await ownerExists();
+
+  return (
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">
+      <HeroBackground />
+
+      <Card className="relative z-10 w-full max-w-sm border-0 bg-white shadow-2xl">
+        <CardHeader>
+          <CardTitle>إعداد حساب المدير</CardTitle>
+          <CardDescription>خطوة تُنفَّذ مرة واحدة فقط عند أول استخدام للنظام</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {alreadySetUp ? (
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-muted-foreground">
+                تم إعداد حساب المدير بالفعل. سجّل الدخول برقم هاتفك من صفحة الدخول.
+              </p>
+              <Button asChild className="w-full">
+                <Link href="/login">الذهاب لصفحة الدخول</Link>
+              </Button>
+            </div>
+          ) : (
+            <SetupForm />
+          )}
+        </CardContent>
+      </Card>
+    </main>
+  );
+}

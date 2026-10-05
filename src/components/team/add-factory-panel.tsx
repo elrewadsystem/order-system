@@ -1,0 +1,177 @@
+"use client";
+
+import { useRef, useState, useTransition } from "react";
+import { toast } from "sonner";
+import { Loader2, Factory as FactoryIcon, Wand2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { resolveMapsUrlCoordsAction } from "@/lib/actions/admin";
+import { createFactoryAction } from "@/lib/actions/factories";
+import { factoryDetailsSchema } from "@/lib/domain/validators";
+import type { Factory } from "@/types/database";
+
+export function AddFactoryPanel({ onCreated }: { onCreated: (factory: Factory) => void }) {
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const [extractStatus, setExtractStatus] = useState<"idle" | "loading" | "found" | "not_found">("idle");
+  const [extracting, startExtractTransition] = useTransition();
+  const lastExtractedUrlRef = useRef<string | null>(null);
+
+  function reset() {
+    setFullName("");
+    setPhone("");
+    setAddress("");
+    setMapsUrl("");
+    setPin(null);
+    setError(null);
+    setExtractStatus("idle");
+    lastExtractedUrlRef.current = null;
+  }
+
+  function handleMapsUrlBlur() {
+    const trimmed = mapsUrl.trim();
+    if (!trimmed || trimmed === lastExtractedUrlRef.current) return;
+    lastExtractedUrlRef.current = trimmed;
+    setExtractStatus("loading");
+    startExtractTransition(async () => {
+      const res = await resolveMapsUrlCoordsAction(trimmed);
+      if (res.ok && res.data) {
+        setPin(res.data);
+        setExtractStatus("found");
+      } else {
+        setExtractStatus("not_found");
+      }
+    });
+  }
+
+  function submit() {
+    const parsed = factoryDetailsSchema.safeParse({
+      name: fullName,
+      phone: phone || null,
+      address,
+      maps_url: mapsUrl,
+      lat: pin?.lat ?? null,
+      lng: pin?.lng ?? null,
+    });
+    if (!parsed.success) {
+      setError(parsed.error.issues[0]?.message ?? "بيانات غير صالحة");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const res = await createFactoryAction(parsed.data);
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      const factory: Factory = {
+        id: res.data.id,
+        name: parsed.data.name,
+        phone: parsed.data.phone?.trim() || null,
+        address: parsed.data.address?.trim() || null,
+        lat: parsed.data.lat ?? null,
+        lng: parsed.data.lng ?? null,
+        maps_url: parsed.data.maps_url?.trim() || null,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+      onCreated(factory);
+      toast.success(
+        pin
+          ? `تمت إضافة المصنع "${parsed.data.name}" وتحديد موقعه على الخريطة من الرابط`
+          : `تمت إضافة المصنع "${parsed.data.name}" — لتحديد موقعه بدقة، اختره من الجدول ثم انقر على مكانه على الخريطة`,
+      );
+      reset();
+    });
+  }
+
+  return (
+    <Card className="mx-auto max-w-lg">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <FactoryIcon className="size-4" />
+          إضافة مصنع جديد
+        </CardTitle>
+        <CardDescription>يسجل دخوله برقم هاتفه، وينشئ كلمة مرور بنفسه أول مرة يدخل بها.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="factory-name">اسم المصنع</Label>
+          <Input id="factory-name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="factory-phone">رقم الهاتف</Label>
+          <Input
+            id="factory-phone"
+            dir="ltr"
+            placeholder="01xxxxxxxxx"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">للتواصل مع المصنع فقط — المصنع ليس له حساب دخول.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="factory-address">عنوان المصنع (اختياري)</Label>
+          <Input
+            id="factory-address"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="مثال: المنطقة الصناعية، مدينة نصر، مبنى 12"
+          />
+          <p className="text-xs text-muted-foreground">يظهر هذا العنوان للمندوب عند تسليم أو استلام أوردر من هذا المصنع.</p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="factory-maps-url">رابط خرائط جوجل (اختياري)</Label>
+          <Input
+            id="factory-maps-url"
+            dir="ltr"
+            value={mapsUrl}
+            onChange={(e) => setMapsUrl(e.target.value)}
+            onBlur={handleMapsUrlBlur}
+            disabled={extracting}
+            placeholder="https://www.google.com/maps/place/..."
+          />
+          <p className="text-xs text-muted-foreground">
+            إن وُجد، يُستخدم مباشرة بدلًا من العنوان النصي أو تحديد الخريطة — أدق وأسرع للمندوب. سيتم تحديد موقعه
+            على الخريطة تلقائيًا من هذا الرابط.
+          </p>
+          {extractStatus === "loading" && (
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3 animate-spin" />
+              جارٍ استخراج الموقع من الرابط...
+            </p>
+          )}
+          {extractStatus === "found" && (
+            <p className="flex items-center gap-1.5 text-xs text-emerald-600">
+              <Wand2 className="size-3" />
+              تم تحديد الموقع تلقائيًا من الرابط — سيظهر مباشرة على خريطة المصانع.
+            </p>
+          )}
+          {extractStatus === "not_found" && (
+            <p className="text-xs text-muted-foreground">
+              لم نستطع استخراج إحداثيات من هذا الرابط — يمكن تحديد الموقع يدويًا لاحقًا من خريطة المصانع.
+            </p>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          إن لم يحتوِ الرابط على موقع دقيق، يمكن تحديد موقع المصنع لاحقًا على الخريطة — من تبويب &quot;المصانع&quot;،
+          اختره من الجدول ثم انقر على مكانه على الخريطة العامة.
+        </p>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        <Button className="w-full" onClick={submit} disabled={pending || extracting}>
+          {pending && <Loader2 className="animate-spin" />}
+          إنشاء حساب المصنع
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
